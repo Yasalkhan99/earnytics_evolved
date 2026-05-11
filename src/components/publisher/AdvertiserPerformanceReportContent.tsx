@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 type AdvertiserRow = {
@@ -18,6 +18,7 @@ type AdvertiserRow = {
 type ReportPayload = {
   from: string;
   to: string;
+  fxUsdApproxAvailable?: boolean;
   attributedTransactionCount: number;
   diagnostics?: {
     trackingLinkCount: number;
@@ -31,6 +32,8 @@ type ReportPayload = {
     leads: number;
     revenueByCurrency: Record<string, number>;
     commissionByCurrency: Record<string, number>;
+    revenueUsdApprox?: number;
+    commissionUsdApprox?: number;
   };
   advertisers: AdvertiserRow[];
 };
@@ -53,26 +56,53 @@ function toUtcYmd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Preset ranges use UTC calendar days (same as From/To labels). */
-function datePresetRange(preset: "today" | "yesterday" | "week" | "month"): { from: string; to: string } {
+type DatePreset = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "lastMonth" | "currentYear" | "previousYear";
+
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "last7", label: "Last 7 Days" },
+  { key: "last30", label: "Last 30 Days" },
+  { key: "thisMonth", label: "This Month" },
+  { key: "lastMonth", label: "Last Month" },
+  { key: "currentYear", label: "Current Year" },
+  { key: "previousYear", label: "Previous Year" },
+];
+
+function datePresetRange(preset: DatePreset): { from: string; to: string } {
   const today0 = utcDayStart();
-  if (preset === "today") {
-    const y = toUtcYmd(today0);
-    return { from: y, to: y };
+  switch (preset) {
+    case "today":
+      return { from: toUtcYmd(today0), to: toUtcYmd(today0) };
+    case "yesterday": {
+      const y0 = new Date(today0);
+      y0.setUTCDate(y0.getUTCDate() - 1);
+      return { from: toUtcYmd(y0), to: toUtcYmd(y0) };
+    }
+    case "last7": {
+      const f = new Date(today0);
+      f.setUTCDate(f.getUTCDate() - 6);
+      return { from: toUtcYmd(f), to: toUtcYmd(today0) };
+    }
+    case "last30": {
+      const f = new Date(today0);
+      f.setUTCDate(f.getUTCDate() - 29);
+      return { from: toUtcYmd(f), to: toUtcYmd(today0) };
+    }
+    case "thisMonth":
+      return { from: toUtcYmd(new Date(Date.UTC(today0.getUTCFullYear(), today0.getUTCMonth(), 1))), to: toUtcYmd(today0) };
+    case "lastMonth": {
+      const s = new Date(Date.UTC(today0.getUTCFullYear(), today0.getUTCMonth() - 1, 1));
+      const e = new Date(Date.UTC(today0.getUTCFullYear(), today0.getUTCMonth(), 0));
+      return { from: toUtcYmd(s), to: toUtcYmd(e) };
+    }
+    case "currentYear":
+      return { from: toUtcYmd(new Date(Date.UTC(today0.getUTCFullYear(), 0, 1))), to: toUtcYmd(today0) };
+    case "previousYear": {
+      const y = today0.getUTCFullYear() - 1;
+      return { from: toUtcYmd(new Date(Date.UTC(y, 0, 1))), to: toUtcYmd(new Date(Date.UTC(y, 11, 31))) };
+    }
   }
-  if (preset === "yesterday") {
-    const y0 = new Date(today0);
-    y0.setUTCDate(y0.getUTCDate() - 1);
-    const y = toUtcYmd(y0);
-    return { from: y, to: y };
-  }
-  if (preset === "week") {
-    const from = new Date(today0);
-    from.setUTCDate(from.getUTCDate() - 6);
-    return { from: toUtcYmd(from), to: toUtcYmd(today0) };
-  }
-  const from = new Date(Date.UTC(today0.getUTCFullYear(), today0.getUTCMonth(), 1));
-  return { from: toUtcYmd(from), to: toUtcYmd(today0) };
 }
 
 function formatMoney(n: number, currency: string) {
@@ -128,6 +158,9 @@ export default function AdvertiserPerformanceReportContent() {
   const [filter, setFilter] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [activePreset, setActivePreset] = useState<DatePreset | null>(null);
+  const presetRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async (f: string, t: string) => {
     setLoading(true);
@@ -224,13 +257,26 @@ export default function AdvertiserPerformanceReportContent() {
     setAppliedTo(to);
   };
 
-  const applyDatePreset = (preset: "today" | "yesterday" | "week" | "month") => {
+  const applyDatePreset = (preset: DatePreset) => {
     const { from: f, to: t } = datePresetRange(preset);
     setFrom(f);
     setTo(t);
     setAppliedFrom(f);
     setAppliedTo(t);
+    setActivePreset(preset);
+    setPresetOpen(false);
   };
+
+  useEffect(() => {
+    if (!presetOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (presetRef.current && !presetRef.current.contains(e.target as Node)) {
+        setPresetOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [presetOpen]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-8">
@@ -256,73 +302,93 @@ export default function AdvertiserPerformanceReportContent() {
           )}
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
-                From (UTC)
-                <input
-                  type="date"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
-                To (UTC)
-                <input
-                  type="date"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50"
-                />
-              </label>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="mr-0.5 text-[11px] uppercase tracking-wide text-zinc-600">Quick</span>
-              {(
-                [
-                  { preset: "today" as const, label: "Today" },
-                  { preset: "yesterday" as const, label: "Yesterday" },
-                  { preset: "week" as const, label: "Week" },
-                  { preset: "month" as const, label: "Month" },
-                ] as const
-              ).map(({ preset, label }) => (
-                <button
-                  key={preset}
-                  type="button"
-                  title={
-                    preset === "week"
-                      ? "Last 7 UTC calendar days (inclusive)"
-                      : preset === "month"
-                        ? "1st of this UTC month through today"
-                        : undefined
-                  }
-                  onClick={() => applyDatePreset(preset)}
-                  className="rounded-lg border border-white/10 bg-zinc-900/80 px-2.5 py-1 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-zinc-800/80 hover:text-white"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          {/* Date range picker with dropdown */}
+          <div className="relative" ref={presetRef}>
             <button
               type="button"
-              onClick={() => applyRange()}
-              className="rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500"
+              onClick={() => setPresetOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-zinc-800/80"
             >
-              Apply
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span className="text-white">
+                {new Date(appliedFrom + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                {" "}&ndash;{" "}
+                {new Date(appliedTo + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+              </span>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 text-zinc-500 transition ${presetOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
             </button>
-            <button
-              type="button"
-              disabled={!data || loading}
-              onClick={() => exportCsv()}
-              className="rounded-xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Export
-            </button>
+
+            {presetOpen && (
+              <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl shadow-black/50">
+                <div className="border-b border-white/5 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <label className="flex flex-col gap-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                      From
+                      <input
+                        type="date"
+                        value={from}
+                        onChange={(e) => { setFrom(e.target.value); setActivePreset(null); }}
+                        className="rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50"
+                      />
+                    </label>
+                    <span className="mt-4 text-zinc-600">–</span>
+                    <label className="flex flex-col gap-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                      To
+                      <input
+                        type="date"
+                        value={to}
+                        onChange={(e) => { setTo(e.target.value); setActivePreset(null); }}
+                        className="rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { applyRange(); setActivePreset(null); setPresetOpen(false); }}
+                    className="mt-2.5 w-full rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-500 hover:to-violet-500"
+                  >
+                    Apply Custom Range
+                  </button>
+                </div>
+                <div className="py-1">
+                  {DATE_PRESETS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => applyDatePreset(key)}
+                      className={`flex w-full items-center px-4 py-2.5 text-left text-sm transition ${
+                        activePreset === key
+                          ? "bg-indigo-600/20 font-semibold text-indigo-300"
+                          : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          <button
+            type="button"
+            disabled={!data || loading}
+            onClick={() => exportCsv()}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            Export
+          </button>
         </div>
       </div>
 
@@ -338,32 +404,41 @@ export default function AdvertiserPerformanceReportContent() {
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {(
-          [
-            { label: "Total clicks", format: "int" as const, render: () => (data?.kpis.totalClicks ?? 0).toLocaleString() },
-            { label: "Sales (txns)", format: "int" as const, render: () => (data?.kpis.sales ?? 0).toLocaleString() },
-            { label: "Leads", format: "int" as const, render: () => (data?.kpis.leads ?? 0).toLocaleString() },
-            {
-              label: "Total revenue",
-              format: "text" as const,
-              render: () => formatCurrencyBucket(data?.kpis.revenueByCurrency),
-            },
-            {
-              label: "Total commission",
-              format: "text" as const,
-              render: () => formatCurrencyBucket(data?.kpis.commissionByCurrency),
-            },
-          ] as const
-        ).map((kpi) => (
+        {[
+          { label: "Total clicks", value: loading ? "…" : (data?.kpis.totalClicks ?? 0).toLocaleString(), big: true },
+          { label: "Sales (txns)", value: loading ? "…" : (data?.kpis.sales ?? 0).toLocaleString(), big: true },
+          { label: "Leads", value: loading ? "…" : (data?.kpis.leads ?? 0).toLocaleString(), big: true },
+        ].map((kpi) => (
           <div key={kpi.label} className={kpiCard}>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{kpi.label}</p>
-            <p
-              className={`mt-2 font-bold tabular-nums tracking-tight text-white ${
-                kpi.format === "text" ? "text-base leading-snug sm:text-lg" : "text-xl sm:text-2xl"
-              }`}
-            >
-              {loading ? "…" : kpi.render()}
+            <p className="mt-2 text-xl font-bold tabular-nums tracking-tight text-white sm:text-2xl">
+              {kpi.value}
             </p>
+          </div>
+        ))}
+
+        {[
+          {
+            label: "Total revenue",
+            bucket: data?.kpis.revenueByCurrency,
+            usd: data?.kpis.revenueUsdApprox,
+          },
+          {
+            label: "Total commission",
+            bucket: data?.kpis.commissionByCurrency,
+            usd: data?.kpis.commissionUsdApprox,
+          },
+        ].map((kpi) => (
+          <div key={kpi.label} className={kpiCard}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{kpi.label}</p>
+            <p className="mt-2 text-base font-bold tabular-nums leading-snug tracking-tight text-white sm:text-lg">
+              {loading ? "…" : formatCurrencyBucket(kpi.bucket)}
+            </p>
+            {!loading && data?.fxUsdApproxAvailable && kpi.usd != null && kpi.usd > 0 && (
+              <p className="mt-1 text-xs font-semibold tabular-nums text-emerald-400/90">
+                ≈ {formatMoney(kpi.usd, "USD")}
+              </p>
+            )}
           </div>
         ))}
       </div>

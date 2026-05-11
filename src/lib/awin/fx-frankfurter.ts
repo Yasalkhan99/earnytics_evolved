@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const FRANKFURTER = "https://api.frankfurter.app/v1";
+const FRANKFURTER = "https://api.frankfurter.app";
 const TO_CHUNK = 18;
 
 export function txnIsoToUtcYmd(iso: string): string {
