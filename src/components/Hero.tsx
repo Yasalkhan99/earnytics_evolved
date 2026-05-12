@@ -37,23 +37,19 @@ export default function Hero() {
       {/* Figma Frame 427319008 — soft panels (edge-to-edge) */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         <div className="absolute inset-y-0 left-0 w-1/2 opacity-[0.92] lg:w-[46%]">
-          <Image
-            src="/figma-assets/hero-bg-left.png"
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/figma-assets/hero-bg-left.svg"
             alt=""
-            fill
-            className="object-cover object-left"
-            sizes="50vw"
-            priority
+            className="absolute inset-0 h-full w-full object-cover object-left"
           />
         </div>
         <div className="absolute inset-y-0 right-0 w-1/2 opacity-[0.92] lg:w-[46%]">
-          <Image
-            src="/figma-assets/hero-bg-right.png"
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/figma-assets/hero-bg-right.svg"
             alt=""
-            fill
-            className="object-cover object-right"
-            sizes="50vw"
-            priority
+            className="absolute inset-0 h-full w-full object-cover object-right"
           />
         </div>
         {/* Figma Group 1410085160 — frosted vertical strips (desktop) */}
@@ -156,6 +152,7 @@ export default function Hero() {
                   className="h-auto w-full"
                   sizes="(max-width: 1024px) 100vw, 55vw"
                   priority
+                  unoptimized
                 />
               </div>
             </div>
