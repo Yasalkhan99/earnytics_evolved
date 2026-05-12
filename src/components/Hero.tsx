@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Caladea, DM_Sans } from "next/font/google";
+import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { AnimatedOutlineButton } from "@/components/ui/AnimatedOutlineButton";
 import { figmaEase } from "@/lib/figma-home-motion";
@@ -25,6 +26,8 @@ const GLASS_COLS = 11;
 
 export default function Hero() {
   const reduceMotion = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   return (
     <section
@@ -135,7 +138,7 @@ export default function Hero() {
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.22, ease: figmaEase }}
-            className={`relative lg:col-span-7 ${!reduceMotion ? "animate-hero-float" : ""}`}
+            className={`relative lg:col-span-7 ${mounted && !reduceMotion ? "animate-hero-float" : ""}`}
           >
             <div className="relative mx-auto w-full max-w-[min(100%,640px)] lg:mx-0 lg:max-w-none">
               <div
