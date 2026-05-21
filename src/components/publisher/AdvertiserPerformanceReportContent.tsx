@@ -7,7 +7,7 @@ type AdvertiserRow = {
   advertiserId: string;
   name: string;
   logoUrl?: string | null;
-  network: "Impact" | "TradeTracker" | "PaidOnResults";
+  network: "Impact" | "TradeTracker" | "PaidOnResults" | "Yieldkit";
   code?: string;
   clicks: number;
   sales: number;
@@ -390,7 +390,7 @@ export default function AdvertiserPerformanceReportContent() {
       <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-700" role="note">
         <span className="font-semibold text-sky-800">Notice · </span>
         Figures are from your Earnytics account: short-link <strong className="text-sky-900">clicks</strong> per brand, and{" "}
-        <strong className="text-sky-900">Impact</strong>, <strong className="text-sky-900">TradeTracker</strong> &amp; <strong className="text-sky-900">PaidOnResults</strong> transactions attributed to you.
+        <strong className="text-sky-900">Impact</strong>, <strong className="text-sky-900">TradeTracker</strong>, <strong className="text-sky-900">PaidOnResults</strong> &amp; <strong className="text-sky-900">Yieldkit</strong> transactions attributed to you.
         Payout policy and platform fees are defined in your publisher agreement — not shown as a split here. Native currencies are shown per row.
       </div>
 
@@ -482,6 +482,8 @@ export default function AdvertiserPerformanceReportContent() {
                   ? `/dashboard/brands/tradetracker/${r.advertiserId}`
                   : r.network === "PaidOnResults"
                   ? `/dashboard/brands/por/${r.advertiserId}`
+                  : r.network === "Yieldkit"
+                  ? `/dashboard/brands/yieldkit/${r.advertiserId}`
                   : `/dashboard/brands/impact/${r.advertiserId}`;
                 return (
                   <tr key={`${r.network}-${r.advertiserId}`} className="hover:bg-gray-50">
@@ -500,8 +502,9 @@ export default function AdvertiserPerformanceReportContent() {
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
                           <span className={`text-[10px] font-semibold ${
-                            r.network === "TradeTracker" ? "text-purple-600"
+                            r.network === "TradeTracker"  ? "text-purple-600"
                             : r.network === "PaidOnResults" ? "text-orange-600"
+                            : r.network === "Yieldkit"    ? "text-indigo-600"
                             : "text-blue-600"}`}>
                             {r.network}
                           </span>

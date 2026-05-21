@@ -44,7 +44,7 @@ function localeFlag(locale?: string | null) {
   return LOCALE_FLAG[locale.toUpperCase()] ?? locale.toUpperCase();
 }
 
-type Network = "impact" | "tradetracker" | "paidonresults";
+type Network = "impact" | "tradetracker" | "paidonresults" | "yieldkit";
 
 export default function BrandsGridContent() {
   const router = useRouter();
@@ -104,6 +104,7 @@ export default function BrandsGridContent() {
       try {
         const apiBase = network === "tradetracker" ? "/api/publisher/tradetracker/brands"
                       : network === "paidonresults" ? "/api/publisher/por/brands"
+                      : network === "yieldkit"      ? "/api/publisher/yieldkit/brands"
                       : "/api/publisher/impact/brands";
         const res = await fetch(`${apiBase}?${params.toString()}`, {
           credentials: "include",
@@ -148,6 +149,7 @@ export default function BrandsGridContent() {
     try {
       const applyApi = network === "tradetracker" ? "/api/publisher/tradetracker/apply"
                      : network === "paidonresults" ? "/api/publisher/por/apply"
+                     : network === "yieldkit"      ? "/api/publisher/yieldkit/apply"
                      : "/api/publisher/impact/apply";
       const res = await fetch(applyApi, {
         method: "POST",
@@ -197,6 +199,7 @@ export default function BrandsGridContent() {
     try {
       const bulkApi = network === "tradetracker"   ? "/api/publisher/tradetracker/bulk-apply"
                    : network === "paidonresults" ? "/api/publisher/por/apply"
+                   : network === "yieldkit"      ? "/api/publisher/yieldkit/apply"
                    : "/api/publisher/impact/bulk-apply";
       const res = await fetch(bulkApi, {
         method: "POST",
@@ -257,15 +260,15 @@ export default function BrandsGridContent() {
           <p className="mt-2 max-w-xl text-sm text-teal-100/80">
             {(approvedOnly || network === "tradetracker")
               ? `Campaigns your admin has approved for you${network === "tradetracker" ? " on TradeTracker" : ""}. Open a card for details.`
-              : `All available ${network === "paidonresults" ? "PaidOnResults" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
+              : `All available ${network === "paidonresults" ? "PaidOnResults" : network === "yieldkit" ? "Yieldkit" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
           </p>
 
           {/* Network selector */}
-          <div className="mt-5 inline-flex rounded-2xl bg-white/10 p-1 backdrop-blur-sm">
-            {(["impact", "tradetracker", "paidonresults"] as Network[]).map((n) => (
+          <div className="mt-5 inline-flex flex-wrap rounded-2xl bg-white/10 p-1 backdrop-blur-sm gap-1">
+            {(["impact", "tradetracker", "paidonresults", "yieldkit"] as Network[]).map((n) => (
               <button key={n} onClick={() => { setNetwork(n); setPage(1); setBrands([]); }}
-                className={`rounded-xl px-5 py-2 text-sm font-semibold capitalize transition-all ${network === n ? "bg-white text-teal-700 shadow-md" : "text-white/80 hover:bg-white/10 hover:text-white"}`}>
-                {n === "impact" ? "Impact" : n === "tradetracker" ? "TradeTracker" : "PaidOnResults"}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition-all ${network === n ? "bg-white text-teal-700 shadow-md" : "text-white/80 hover:bg-white/10 hover:text-white"}`}>
+                {n === "impact" ? "Impact" : n === "tradetracker" ? "TradeTracker" : n === "paidonresults" ? "PaidOnResults" : "Yieldkit"}
               </button>
             ))}
           </div>
@@ -492,7 +495,7 @@ export default function BrandsGridContent() {
 
                         <div className="mt-auto pt-4">
                           {b.applicationStatus === "approved" && (
-                            <Link href={network === "tradetracker" ? `/dashboard/brands/tradetracker/${b.campaignId}` : network === "paidonresults" ? `/dashboard/brands/por/${b.campaignId}` : `/dashboard/brands/impact/${b.campaignId}`}
+                            <Link href={network === "tradetracker" ? `/dashboard/brands/tradetracker/${b.campaignId}` : network === "paidonresults" ? `/dashboard/brands/por/${b.campaignId}` : network === "yieldkit" ? `/dashboard/brands/yieldkit/${b.campaignId}` : `/dashboard/brands/impact/${b.campaignId}`}
                               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-200 transition hover:from-teal-600 hover:to-emerald-700 hover:shadow-teal-300">
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />

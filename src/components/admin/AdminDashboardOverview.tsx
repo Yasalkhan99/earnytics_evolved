@@ -62,6 +62,13 @@ type PORStats = {
   lastSyncAt: string | null; lastSyncError: string | null;
 };
 
+type YKStats = {
+  totalCampaigns: number; activeCampaigns: number;
+  totalTransactions: number; pendingApplications: number;
+  commissionByCurrency: Record<string, number>;
+  lastSyncAt: string | null; lastSyncError: string | null;
+};
+
 /* ─── Helpers ──────────────────────────────────────────── */
 function formatMoney(n: number, currency: string) {
   try { return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n); }
@@ -201,6 +208,7 @@ export default function AdminDashboardOverview() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [ttStats, setTtStats] = useState<TTStats | null>(null);
   const [porStats, setPorStats] = useState<PORStats | null>(null);
+  const [ykStats,  setYkStats]  = useState<YKStats  | null>(null);
   const [publishersEarnings, setPublishersEarnings] = useState<PublisherEarningRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -213,22 +221,25 @@ export default function AdminDashboardOverview() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const [dashRes, pubRes, ttRes, porRes] = await Promise.all([
+        const [dashRes, pubRes, ttRes, porRes, ykRes] = await Promise.all([
           fetch("/api/admin/dashboard-stats", { credentials: "include" }),
           fetch("/api/admin/publishers-earnings?days=30", { credentials: "include" }),
           fetch("/api/admin/tradetracker/stats", { credentials: "include" }),
           fetch("/api/admin/por/stats", { credentials: "include" }),
+          fetch("/api/admin/yieldkit/stats", { credentials: "include" }),
         ]);
         const dashData = await dashRes.json().catch(() => ({}));
         const pubData  = await pubRes.json().catch(() => ({}));
         const ttData   = await ttRes.json().catch(() => ({}));
         const porData  = await porRes.json().catch(() => ({}));
+        const ykData   = await ykRes.json().catch(() => ({}));
         if (!dashRes.ok) { if (!cancelled) setError(dashData.error ?? "Could not load stats"); return; }
         if (!cancelled) {
           setStats(dashData as DashboardStats);
           setPublishersEarnings(Array.isArray(pubData.publishers) ? pubData.publishers : []);
           if (ttRes.ok)  setTtStats(ttData as TTStats);
           if (porRes.ok) setPorStats(porData as PORStats);
+          if (ykRes.ok)  setYkStats(ykData as YKStats);
         }
       } catch { if (!cancelled) setError("Could not load stats"); }
       finally { if (!cancelled) setLoading(false); }
@@ -237,16 +248,18 @@ export default function AdminDashboardOverview() {
   }, []);
 
   const refreshStats = async () => {
-    const [dashRes, pubRes, ttRes, porRes] = await Promise.all([
+    const [dashRes, pubRes, ttRes, porRes, ykRes] = await Promise.all([
       fetch("/api/admin/dashboard-stats", { credentials: "include" }),
       fetch("/api/admin/publishers-earnings?days=30", { credentials: "include" }),
       fetch("/api/admin/tradetracker/stats", { credentials: "include" }),
       fetch("/api/admin/por/stats", { credentials: "include" }),
+      fetch("/api/admin/yieldkit/stats", { credentials: "include" }),
     ]);
     if (dashRes.ok) setStats((await dashRes.json()) as DashboardStats);
     if (pubRes.ok) { const p = await pubRes.json(); setPublishersEarnings(Array.isArray(p.publishers) ? p.publishers : []); }
     if (ttRes.ok)  setTtStats((await ttRes.json()) as TTStats);
     if (porRes.ok) setPorStats((await porRes.json()) as PORStats);
+    if (ykRes.ok)  setYkStats((await ykRes.json()) as YKStats);
   };
 
   /* icons */
@@ -465,6 +478,54 @@ export default function AdminDashboardOverview() {
                 />
               </div>
             )}
+
+            {/* ── Yieldkit ── */}
+            {ykStats && (
+              <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                <FinanceCard
+                  title="Yieldkit — Commissions"
+                  primary={Object.entries(ykStats.commissionByCurrency).length > 0
+                    ? Object.entries(ykStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ")
+                    : "$0.00"}
+                  sub={`${ykStats.totalTransactions.toLocaleString()} transactions · ${ykStats.activeCampaigns.toLocaleString()} active campaigns · Last sync: ${ykStats.lastSyncAt ? new Date(ykStats.lastSyncAt).toLocaleString() : "never"}`}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <ActionBtn variant="primary" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("yk-txn"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/yieldkit/sync-transactions", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Yieldkit: ${data.upserted ?? 0} transactions synced.` : `✗ ${data.error ?? "Sync failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Yieldkit sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "yk-txn" ? <><div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Syncing…</> : "Sync Transactions"}
+                    </ActionBtn>
+                    <ActionBtn variant="ghost" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("yk-campaigns"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/yieldkit/sync-campaigns", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Yieldkit: ${data.upserted ?? 0} campaigns synced.` : `✗ ${data.error ?? "Failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Yieldkit campaign sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "yk-campaigns" ? "Syncing…" : "Sync Campaigns"}
+                    </ActionBtn>
+                  </div>
+                  {ykStats.lastSyncError && (
+                    <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">Last error: {ykStats.lastSyncError}</p>
+                  )}
+                </FinanceCard>
+                <FinanceCard
+                  title="Yieldkit — Campaigns"
+                  primary={ykStats.totalCampaigns.toLocaleString()}
+                  sub={`${ykStats.activeCampaigns.toLocaleString()} active · ${ykStats.pendingApplications.toLocaleString()} pending publisher applications`}
+                />
+              </div>
+            )}
           </section>
 
           {/* ── Publishers earnings table ── */}
@@ -587,6 +648,31 @@ export default function AdminDashboardOverview() {
                   </td>
                   <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">
                     {Object.entries(porStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ") || "—"}
+                  </td>
+                </tr>
+              )}
+              {/* Yieldkit row */}
+              {ykStats && (
+                <tr className="border-b border-gray-50 transition-colors hover:bg-indigo-50/30">
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Yieldkit
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-gray-600">
+                    {ykStats.activeCampaigns.toLocaleString()}
+                    <span className="mt-0.5 block text-[10px] text-gray-400">{ykStats.totalCampaigns.toLocaleString()} total</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400">—</td>
+                  <td className="px-4 py-3 text-gray-400">—</td>
+                  <td className="px-4 py-3 tabular-nums text-gray-600">
+                    {ykStats.totalTransactions.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 font-medium tabular-nums text-indigo-600">
+                    {Object.entries(ykStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">
+                    {Object.entries(ykStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ") || "—"}
                   </td>
                 </tr>
               )}

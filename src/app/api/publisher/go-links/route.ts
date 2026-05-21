@@ -99,11 +99,12 @@ export async function GET(request: Request) {
     const impactIds     = [...new Set(rows.filter(r => (r.network ?? "impact") === "impact").map(r => r.campaign_id).filter(Boolean))];
     const ttIds         = [...new Set(rows.filter(r => r.network === "tradetracker").map(r => r.campaign_id).filter(Boolean))];
     const porIds        = [...new Set(rows.filter(r => r.network === "paidonresults").map(r => r.campaign_id).filter(Boolean))];
+    const ykIds         = [...new Set(rows.filter(r => r.network === "yieldkit").map(r => r.campaign_id).filter(Boolean))];
 
     const nameMap: Record<string, string>        = {};
     const logoMap: Record<string, string | null> = {};
 
-    const [impactRes, ttRes, porRes] = await Promise.all([
+    const [impactRes, ttRes, porRes, ykRes] = await Promise.all([
       impactIds.length > 0
         ? supabase.from("impact_campaigns").select("impact_id, name, logo_url").in("impact_id", impactIds)
         : { data: [] },
@@ -112,6 +113,9 @@ export async function GET(request: Request) {
         : { data: [] },
       porIds.length > 0
         ? supabase.from("por_merchants").select("merchant_id, name, logo_url").in("merchant_id", porIds)
+        : { data: [] },
+      ykIds.length > 0
+        ? supabase.from("yieldkit_campaigns").select("advertiser_id, name, logo_url").in("advertiser_id", ykIds)
         : { data: [] },
     ]);
 
@@ -134,6 +138,14 @@ export async function GET(request: Request) {
       if (id) {
         nameMap[id] = (c as { name: string }).name ?? id;
         logoMap[id] = raw ? `/api/por-logo?url=${encodeURIComponent(raw)}` : null;
+      }
+    }
+    for (const c of ykRes.data ?? []) {
+      const id  = (c as { advertiser_id: string; name: string; logo_url: string | null }).advertiser_id;
+      const raw = (c as { logo_url: string | null }).logo_url;
+      if (id) {
+        nameMap[id] = (c as { name: string }).name ?? id;
+        logoMap[id] = raw ?? null;
       }
     }
 
