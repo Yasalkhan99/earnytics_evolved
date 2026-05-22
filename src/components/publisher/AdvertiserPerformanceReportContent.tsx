@@ -7,7 +7,7 @@ type AdvertiserRow = {
   advertiserId: string;
   name: string;
   logoUrl?: string | null;
-  network: "Impact" | "TradeTracker" | "PaidOnResults" | "Yieldkit";
+  network: "Impact" | "TradeTracker" | "PaidOnResults" | "Yieldkit" | "Admitad" | "Linkhexa";
   code?: string;
   clicks: number;
   sales: number;
@@ -484,6 +484,10 @@ export default function AdvertiserPerformanceReportContent() {
                   ? `/dashboard/brands/por/${r.advertiserId}`
                   : r.network === "Yieldkit"
                   ? `/dashboard/brands/yieldkit/${r.advertiserId}`
+                  : r.network === "Admitad"
+                  ? `/dashboard/brands/admitad/${r.advertiserId}`
+                  : r.network === "Linkhexa"
+                  ? `/dashboard/brands/linkhexa/${r.advertiserId}`
                   : `/dashboard/brands/impact/${r.advertiserId}`;
                 return (
                   <tr key={`${r.network}-${r.advertiserId}`} className="hover:bg-gray-50">
@@ -505,6 +509,8 @@ export default function AdvertiserPerformanceReportContent() {
                             r.network === "TradeTracker"  ? "text-purple-600"
                             : r.network === "PaidOnResults" ? "text-orange-600"
                             : r.network === "Yieldkit"    ? "text-indigo-600"
+                            : r.network === "Admitad"     ? "text-violet-600"
+                            : r.network === "Linkhexa"    ? "text-teal-600"
                             : "text-blue-600"}`}>
                             {r.network}
                           </span>

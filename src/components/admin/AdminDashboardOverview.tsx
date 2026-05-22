@@ -41,6 +41,14 @@ type DashboardStats = {
     primaryCommissionCurrency: string | null; primaryCommission: number;
   };
   awinSyncOnDashboardLoad?: { ran: boolean; skippedReason?: string; error?: string };
+  linkhexaReporting?: {
+    programmesCached: number;
+    activeProgrammes: number;
+    transactionsStored: number;
+    trackingLinks: number;
+    lastSyncAt: string | null;
+    lastSyncError: string | null;
+  };
 };
 
 type PublisherEarningRow = {
@@ -209,6 +217,8 @@ export default function AdminDashboardOverview() {
   const [ttStats, setTtStats] = useState<TTStats | null>(null);
   const [porStats, setPorStats] = useState<PORStats | null>(null);
   const [ykStats,  setYkStats]  = useState<YKStats  | null>(null);
+  const [admitadStats, setAdmitadStats] = useState<{ totalCampaigns: number; activeCampaigns: number; totalTransactions: number; pendingApplications: number; commissionByCurrency: Record<string, number>; lastSyncAt: string | null; lastSyncError: string | null } | null>(null);
+  const [lhStats, setLhStats] = useState<{ totalProgrammes: number; activeProgrammes: number; totalTransactions: number; pendingApplications: number; trackingLinks?: number; totalClicks?: number; commissionByCurrency: Record<string, number>; lastSyncAt: string | null; lastSyncError: string | null } | null>(null);
   const [publishersEarnings, setPublishersEarnings] = useState<PublisherEarningRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,18 +231,22 @@ export default function AdminDashboardOverview() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const [dashRes, pubRes, ttRes, porRes, ykRes] = await Promise.all([
+        const [dashRes, pubRes, ttRes, porRes, ykRes, adRes, lhRes] = await Promise.all([
           fetch("/api/admin/dashboard-stats", { credentials: "include" }),
           fetch("/api/admin/publishers-earnings?days=30", { credentials: "include" }),
           fetch("/api/admin/tradetracker/stats", { credentials: "include" }),
           fetch("/api/admin/por/stats", { credentials: "include" }),
           fetch("/api/admin/yieldkit/stats", { credentials: "include" }),
+          fetch("/api/admin/admitad/stats", { credentials: "include" }),
+          fetch("/api/admin/linkhexa/stats", { credentials: "include" }),
         ]);
         const dashData = await dashRes.json().catch(() => ({}));
         const pubData  = await pubRes.json().catch(() => ({}));
         const ttData   = await ttRes.json().catch(() => ({}));
         const porData  = await porRes.json().catch(() => ({}));
         const ykData   = await ykRes.json().catch(() => ({}));
+        const adData   = await adRes.json().catch(() => ({}));
+        const lhData   = await lhRes.json().catch(() => ({}));
         if (!dashRes.ok) { if (!cancelled) setError(dashData.error ?? "Could not load stats"); return; }
         if (!cancelled) {
           setStats(dashData as DashboardStats);
@@ -240,6 +254,22 @@ export default function AdminDashboardOverview() {
           if (ttRes.ok)  setTtStats(ttData as TTStats);
           if (porRes.ok) setPorStats(porData as PORStats);
           if (ykRes.ok)  setYkStats(ykData as YKStats);
+          if (adRes.ok)  setAdmitadStats(adData);
+          if (lhRes.ok)  setLhStats(lhData);
+          else if ((dashData as DashboardStats).linkhexaReporting) {
+            const r = (dashData as DashboardStats).linkhexaReporting!;
+            setLhStats({
+              totalProgrammes: r.programmesCached,
+              activeProgrammes: r.activeProgrammes,
+              totalTransactions: r.transactionsStored,
+              pendingApplications: 0,
+              trackingLinks: r.trackingLinks,
+              totalClicks: 0,
+              commissionByCurrency: {},
+              lastSyncAt: r.lastSyncAt,
+              lastSyncError: r.lastSyncError,
+            });
+          }
         }
       } catch { if (!cancelled) setError("Could not load stats"); }
       finally { if (!cancelled) setLoading(false); }
@@ -248,18 +278,37 @@ export default function AdminDashboardOverview() {
   }, []);
 
   const refreshStats = async () => {
-    const [dashRes, pubRes, ttRes, porRes, ykRes] = await Promise.all([
+    const [dashRes, pubRes, ttRes, porRes, ykRes, adRes, lhRes] = await Promise.all([
       fetch("/api/admin/dashboard-stats", { credentials: "include" }),
       fetch("/api/admin/publishers-earnings?days=30", { credentials: "include" }),
       fetch("/api/admin/tradetracker/stats", { credentials: "include" }),
       fetch("/api/admin/por/stats", { credentials: "include" }),
       fetch("/api/admin/yieldkit/stats", { credentials: "include" }),
+      fetch("/api/admin/admitad/stats", { credentials: "include" }),
+      fetch("/api/admin/linkhexa/stats", { credentials: "include" }),
     ]);
     if (dashRes.ok) setStats((await dashRes.json()) as DashboardStats);
     if (pubRes.ok) { const p = await pubRes.json(); setPublishersEarnings(Array.isArray(p.publishers) ? p.publishers : []); }
     if (ttRes.ok)  setTtStats((await ttRes.json()) as TTStats);
     if (porRes.ok) setPorStats((await porRes.json()) as PORStats);
     if (ykRes.ok)  setYkStats((await ykRes.json()) as YKStats);
+    if (adRes.ok)  setAdmitadStats(await adRes.json());
+    if (lhRes.ok) {
+      setLhStats(await lhRes.json());
+    } else if (stats?.linkhexaReporting) {
+      const r = stats.linkhexaReporting;
+      setLhStats({
+        totalProgrammes: r.programmesCached,
+        activeProgrammes: r.activeProgrammes,
+        totalTransactions: r.transactionsStored,
+        pendingApplications: 0,
+        trackingLinks: r.trackingLinks,
+        totalClicks: 0,
+        commissionByCurrency: {},
+        lastSyncAt: r.lastSyncAt,
+        lastSyncError: r.lastSyncError,
+      });
+    }
   };
 
   /* icons */
@@ -528,6 +577,108 @@ export default function AdminDashboardOverview() {
             )}
           </section>
 
+          {/* ── Linkhexa ── */}
+          {lhStats && (
+            <section>
+              <SectionTitle sub="Linkhexa Partner API (Awin catalogue)">Linkhexa</SectionTitle>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FinanceCard
+                  title="Linkhexa — Commissions"
+                  primary={Object.entries(lhStats.commissionByCurrency).length > 0
+                    ? Object.entries(lhStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ")
+                    : "—"}
+                  sub={`${lhStats.totalTransactions.toLocaleString()} transactions · Last sync: ${lhStats.lastSyncAt ? new Date(lhStats.lastSyncAt).toLocaleString() : "never"}`}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <ActionBtn variant="primary" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("lh-txn"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/linkhexa/sync-transactions", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Linkhexa: ${data.upserted ?? 0} transactions synced.` : `✗ ${data.error ?? "Sync failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Linkhexa sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "lh-txn" ? <><div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Syncing…</> : "Sync Transactions"}
+                    </ActionBtn>
+                    <ActionBtn variant="ghost" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("lh-programmes"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/linkhexa/sync-campaigns", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Linkhexa: ${data.upserted ?? 0} programmes synced.` : `✗ ${data.error ?? "Failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Linkhexa programme sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "lh-programmes" ? "Syncing…" : "Sync Programmes"}
+                    </ActionBtn>
+                  </div>
+                  {lhStats.lastSyncError && (
+                    <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">Last error: {lhStats.lastSyncError}</p>
+                  )}
+                </FinanceCard>
+                <FinanceCard
+                  title="Linkhexa — Programmes"
+                  primary={lhStats.totalProgrammes.toLocaleString()}
+                  sub={`${lhStats.activeProgrammes.toLocaleString()} active · ${lhStats.pendingApplications.toLocaleString()} pending publisher applications`}
+                />
+              </div>
+            </section>
+          )}
+
+          {/* ── Admitad ── */}
+          {admitadStats && (
+            <section>
+              <SectionTitle sub="Admitad affiliate network">Admitad</SectionTitle>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FinanceCard
+                  title="Admitad — Commissions"
+                  primary={Object.entries(admitadStats.commissionByCurrency).length > 0
+                    ? Object.entries(admitadStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ")
+                    : "—"}
+                  sub={`${admitadStats.totalTransactions.toLocaleString()} transactions · Last sync: ${admitadStats.lastSyncAt ? new Date(admitadStats.lastSyncAt).toLocaleString() : "never"}`}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <ActionBtn variant="primary" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("admitad-txn"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/admitad/sync-transactions", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Admitad: ${data.upserted ?? 0} transactions synced.` : `✗ ${data.error ?? "Sync failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Admitad sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "admitad-txn" ? <><div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Syncing…</> : "Sync Transactions"}
+                    </ActionBtn>
+                    <ActionBtn variant="ghost" disabled={syncing !== null} onClick={async () => {
+                      setSyncing("admitad-campaigns"); setSyncMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/admitad/sync-campaigns", { method: "POST", credentials: "include" });
+                        const data = await res.json().catch(() => ({}));
+                        setSyncMessage(res.ok ? `✓ Admitad: ${data.upserted ?? 0} campaigns synced.` : `✗ ${data.error ?? "Failed"}`);
+                        if (res.ok) await refreshStats();
+                      } catch { setSyncMessage("✗ Admitad campaign sync failed"); }
+                      finally { setSyncing(null); }
+                    }}>
+                      {syncing === "admitad-campaigns" ? "Syncing…" : "Sync Campaigns"}
+                    </ActionBtn>
+                  </div>
+                  {admitadStats.lastSyncError && (
+                    <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">Last error: {admitadStats.lastSyncError}</p>
+                  )}
+                </FinanceCard>
+                <FinanceCard
+                  title="Admitad — Campaigns"
+                  primary={admitadStats.totalCampaigns.toLocaleString()}
+                  sub={`${admitadStats.activeCampaigns.toLocaleString()} active · ${admitadStats.pendingApplications.toLocaleString()} pending publisher applications`}
+                />
+              </div>
+            </section>
+          )}
+
           {/* ── Publishers earnings table ── */}
           {publishersEarnings.length > 0 && (
             <section>
@@ -676,6 +827,75 @@ export default function AdminDashboardOverview() {
                   </td>
                 </tr>
               )}
+              {/* Admitad row */}
+              {admitadStats && (
+                <tr className="border-b border-gray-50 transition-colors hover:bg-violet-50/30">
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> Admitad
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-gray-600">
+                    {admitadStats.activeCampaigns.toLocaleString()}
+                    <span className="mt-0.5 block text-[10px] text-gray-400">{admitadStats.totalCampaigns.toLocaleString()} total</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400">—</td>
+                  <td className="px-4 py-3 text-gray-400">—</td>
+                  <td className="px-4 py-3 tabular-nums text-gray-600">
+                    {admitadStats.totalTransactions.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 font-medium tabular-nums text-violet-600">
+                    {Object.entries(admitadStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">
+                    {Object.entries(admitadStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ") || formatUsd(0)}
+                  </td>
+                </tr>
+              )}
+              {/* Linkhexa row — always visible */}
+              {(() => {
+                const lh = lhStats ?? (stats.linkhexaReporting ? {
+                  totalProgrammes: stats.linkhexaReporting.programmesCached,
+                  activeProgrammes: stats.linkhexaReporting.activeProgrammes,
+                  totalTransactions: stats.linkhexaReporting.transactionsStored,
+                  trackingLinks: stats.linkhexaReporting.trackingLinks,
+                  totalClicks: 0,
+                  commissionByCurrency: {} as Record<string, number>,
+                } : null);
+                return (
+              <tr className="border-b border-gray-50 transition-colors hover:bg-teal-50/30">
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-500" /> Linkhexa
+                  </span>
+                </td>
+                <td className="px-4 py-3 tabular-nums text-gray-600">
+                  {(lh?.activeProgrammes ?? 0).toLocaleString()}
+                  <span className="mt-0.5 block text-[10px] text-gray-400">
+                    {(lh?.totalProgrammes ?? 0).toLocaleString()} total
+                    {!lh && (
+                      <span className="text-amber-600"> · reload page</span>
+                    )}
+                  </span>
+                </td>
+                <td className="px-4 py-3 tabular-nums text-gray-600">
+                  {(lh?.trackingLinks ?? 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 tabular-nums text-teal-600">
+                  {(lh?.totalClicks ?? 0) > 0 ? (lh!.totalClicks ?? 0).toLocaleString() : "—"}
+                </td>
+                <td className="px-4 py-3 tabular-nums text-gray-600">
+                  {(lh?.totalTransactions ?? 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 font-medium tabular-nums text-teal-600">—</td>
+                <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">
+                  {lhStats && Object.keys(lhStats.commissionByCurrency).length > 0
+                    ? Object.entries(lhStats.commissionByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(" · ")
+                    : formatUsd(0)}
+                </td>
+              </tr>
+                );
+              })()}
             </AdminTable>
             <p className="mt-2 text-[10px] text-gray-400">
               Window: {stats.awinActivityLast30Days.fromYmd} → {stats.awinActivityLast30Days.toYmd} UTC

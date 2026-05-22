@@ -32,16 +32,33 @@ export async function PATCH(request: Request) {
   if (!adminRequestIsAuthorized(request))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json() as { id?: string; status?: string };
-  const { id, status } = body;
-  if (!id || !status) return NextResponse.json({ error: "id and status required" }, { status: 400 });
+  const body = await request.json() as { id?: string; ids?: string[]; status?: string };
+  const { status } = body;
+  if (!status) return NextResponse.json({ error: "status required" }, { status: 400 });
   if (!["approved", "rejected", "pending"].includes(status))
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
 
   const supabase = createServerSupabaseClient();
+  const updatedAt = new Date().toISOString();
+
+  // Bulk update
+  if (Array.isArray(body.ids) && body.ids.length > 0) {
+    const ids = body.ids.map(String).filter(Boolean);
+    const { error } = await supabase
+      .from("publisher_yieldkit_applications")
+      .update({ status, updated_at: updatedAt })
+      .in("id", ids);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, updated: ids.length });
+  }
+
+  const id = body.id;
+  if (!id) return NextResponse.json({ error: "id or ids required" }, { status: 400 });
+
   const { error } = await supabase
     .from("publisher_yieldkit_applications")
-    .update({ status, updated_at: new Date().toISOString() })
+    .update({ status, updated_at: updatedAt })
     .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

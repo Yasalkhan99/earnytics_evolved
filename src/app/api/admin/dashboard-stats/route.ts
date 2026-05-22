@@ -186,6 +186,11 @@ export async function GET(request: Request) {
       syncRowResult,
       impactSyncRowResult,
       agg30Rpc,
+      linkhexaProgrammesCached,
+      linkhexaProgrammesActive,
+      linkhexaTransactionsCached,
+      linkhexaTrackingLinks,
+      linkhexaSyncRowResult,
     ] = await Promise.all([
       countWhere("profiles", {}),
       countWhere("profiles", { role: "publisher" }),
@@ -212,6 +217,11 @@ export async function GET(request: Request) {
       supabase.from("awin_transaction_sync_state").select("last_completed_at, last_error").eq("id", "default").maybeSingle(),
       supabase.from("impact_action_sync_state").select("last_completed_at, last_error").eq("id", "default").maybeSingle(),
       loadWindowTotalsFromRpc(supabase, win30.start, win30.end),
+      countWhere("linkhexa_programmes", {}),
+      supabase.from("linkhexa_programmes").select("*", { count: "exact", head: true }).ilike("programme_status", "active"),
+      countWhere("linkhexa_transactions", {}),
+      supabase.from("publisher_go_links").select("*", { count: "exact", head: true }).eq("network", "linkhexa"),
+      supabase.from("linkhexa_sync_state").select("last_completed_at, last_error").eq("id", "default").maybeSingle(),
     ]);
 
     // Resolve clicks
@@ -364,6 +374,14 @@ export async function GET(request: Request) {
         applicationsApproved: impactAppsApproved,
       },
       impactSyncOnDashboardLoad,
+      linkhexaReporting: {
+        programmesCached: linkhexaProgrammesCached,
+        activeProgrammes: linkhexaProgrammesActive.count ?? linkhexaProgrammesCached,
+        transactionsStored: linkhexaTransactionsCached,
+        trackingLinks: linkhexaTrackingLinks.count ?? 0,
+        lastSyncAt: linkhexaSyncRowResult.data?.last_completed_at ?? null,
+        lastSyncError: linkhexaSyncRowResult.data?.last_error ?? null,
+      },
     };
 
     // Store in cache (skip if forced refresh so next normal load gets fresh data)

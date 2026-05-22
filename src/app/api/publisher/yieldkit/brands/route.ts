@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     if (!approvedIds.length) return NextResponse.json({ brands: [], pagination: null, totalCampaigns: 0 });
     q = q.in("advertiser_id", approvedIds);
   } else {
-    q = q.eq("status", "ACTIVE");
+    q = q.in("status", ["ACTIVE", "active", "Active"]);
   }
 
   if (search) q = q.ilike("name", `%${search}%`);

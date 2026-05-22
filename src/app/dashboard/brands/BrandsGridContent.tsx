@@ -44,7 +44,7 @@ function localeFlag(locale?: string | null) {
   return LOCALE_FLAG[locale.toUpperCase()] ?? locale.toUpperCase();
 }
 
-type Network = "impact" | "tradetracker" | "paidonresults" | "yieldkit";
+type Network = "impact" | "tradetracker" | "paidonresults" | "yieldkit" | "admitad" | "linkhexa";
 
 export default function BrandsGridContent() {
   const router = useRouter();
@@ -105,6 +105,8 @@ export default function BrandsGridContent() {
         const apiBase = network === "tradetracker" ? "/api/publisher/tradetracker/brands"
                       : network === "paidonresults" ? "/api/publisher/por/brands"
                       : network === "yieldkit"      ? "/api/publisher/yieldkit/brands"
+                      : network === "admitad"       ? "/api/publisher/admitad/brands"
+                      : network === "linkhexa"     ? "/api/publisher/linkhexa/brands"
                       : "/api/publisher/impact/brands";
         const res = await fetch(`${apiBase}?${params.toString()}`, {
           credentials: "include",
@@ -116,11 +118,17 @@ export default function BrandsGridContent() {
         }
         if (res.status === 403) {
           const data = await res.json().catch(() => ({}));
+          setBrands([]);
+          setPagination(null);
+          setTotalCampaigns(0);
           setError(data.error || "Access denied.");
           return;
         }
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
+          setBrands([]);
+          setPagination(null);
+          setTotalCampaigns(0);
           setError(data.error || "Could not load brands.");
           return;
         }
@@ -150,6 +158,8 @@ export default function BrandsGridContent() {
       const applyApi = network === "tradetracker" ? "/api/publisher/tradetracker/apply"
                      : network === "paidonresults" ? "/api/publisher/por/apply"
                      : network === "yieldkit"      ? "/api/publisher/yieldkit/apply"
+                     : network === "admitad"       ? "/api/publisher/admitad/apply"
+                     : network === "linkhexa"     ? "/api/publisher/linkhexa/apply"
                      : "/api/publisher/impact/apply";
       const res = await fetch(applyApi, {
         method: "POST",
@@ -200,6 +210,8 @@ export default function BrandsGridContent() {
       const bulkApi = network === "tradetracker"   ? "/api/publisher/tradetracker/bulk-apply"
                    : network === "paidonresults" ? "/api/publisher/por/apply"
                    : network === "yieldkit"      ? "/api/publisher/yieldkit/apply"
+                   : network === "admitad"       ? "/api/publisher/admitad/apply"
+                   : network === "linkhexa"     ? "/api/publisher/linkhexa/apply"
                    : "/api/publisher/impact/bulk-apply";
       const res = await fetch(bulkApi, {
         method: "POST",
@@ -260,15 +272,15 @@ export default function BrandsGridContent() {
           <p className="mt-2 max-w-xl text-sm text-teal-100/80">
             {(approvedOnly || network === "tradetracker")
               ? `Campaigns your admin has approved for you${network === "tradetracker" ? " on TradeTracker" : ""}. Open a card for details.`
-              : `All available ${network === "paidonresults" ? "PaidOnResults" : network === "yieldkit" ? "Yieldkit" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
+              : `All available ${network === "paidonresults" ? "PaidOnResults" : network === "yieldkit" ? "Yieldkit" : network === "admitad" ? "Admitad" : network === "linkhexa" ? "Linkhexa" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
           </p>
 
           {/* Network selector */}
           <div className="mt-5 inline-flex flex-wrap rounded-2xl bg-white/10 p-1 backdrop-blur-sm gap-1">
-            {(["impact", "tradetracker", "paidonresults", "yieldkit"] as Network[]).map((n) => (
+            {(["impact", "tradetracker", "paidonresults", "yieldkit", "admitad", "linkhexa"] as Network[]).map((n) => (
               <button key={n} onClick={() => { setNetwork(n); setPage(1); setBrands([]); }}
                 className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize transition-all ${network === n ? "bg-white text-teal-700 shadow-md" : "text-white/80 hover:bg-white/10 hover:text-white"}`}>
-                {n === "impact" ? "Impact" : n === "tradetracker" ? "TradeTracker" : n === "paidonresults" ? "PaidOnResults" : "Yieldkit"}
+                {n === "impact" ? "Impact" : n === "tradetracker" ? "TradeTracker" : n === "paidonresults" ? "PaidOnResults" : n === "yieldkit" ? "Yieldkit" : n === "admitad" ? "Admitad" : "Linkhexa"}
               </button>
             ))}
           </div>
@@ -368,7 +380,12 @@ export default function BrandsGridContent() {
               </svg>
             </div>
             <p className="font-semibold text-gray-700">No campaigns found</p>
-            <p className="mt-1 text-sm text-gray-400">Ask an admin to sync {network === "tradetracker" ? "TradeTracker" : network === "paidonresults" ? "PaidOnResults" : "Impact"} campaigns.</p>
+            {network === "admitad"
+              ? <p className="mt-1 text-sm text-gray-400">No connected Admitad campaigns yet. Join campaigns on <a href="https://publishers.admitad.com" target="_blank" rel="noreferrer" className="text-indigo-500 underline">publishers.admitad.com</a>, then ask admin to run Sync Campaigns.</p>
+              : network === "linkhexa"
+              ? <p className="mt-1 text-sm text-gray-400">No programmes yet. Ask admin to run <strong>Linkhexa → Sync Programmes</strong>.</p>
+              : <p className="mt-1 text-sm text-gray-400">Ask an admin to sync {network === "tradetracker" ? "TradeTracker" : network === "paidonresults" ? "PaidOnResults" : "Impact"} campaigns.</p>
+            }
           </div>
         ) : !error && emptyApprovedTab ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -495,7 +512,7 @@ export default function BrandsGridContent() {
 
                         <div className="mt-auto pt-4">
                           {b.applicationStatus === "approved" && (
-                            <Link href={network === "tradetracker" ? `/dashboard/brands/tradetracker/${b.campaignId}` : network === "paidonresults" ? `/dashboard/brands/por/${b.campaignId}` : network === "yieldkit" ? `/dashboard/brands/yieldkit/${b.campaignId}` : `/dashboard/brands/impact/${b.campaignId}`}
+                            <Link href={network === "tradetracker" ? `/dashboard/brands/tradetracker/${b.campaignId}` : network === "paidonresults" ? `/dashboard/brands/por/${b.campaignId}` : network === "yieldkit" ? `/dashboard/brands/yieldkit/${b.campaignId}` : network === "admitad" ? `/dashboard/brands/admitad/${b.campaignId}` : network === "linkhexa" ? `/dashboard/brands/linkhexa/${b.campaignId}` : `/dashboard/brands/impact/${b.campaignId}`}
                               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-200 transition hover:from-teal-600 hover:to-emerald-700 hover:shadow-teal-300">
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -541,7 +558,7 @@ export default function BrandsGridContent() {
                   <span className="font-semibold text-gray-800">{pg.total}</span>
                   {approvedOnly ? " approved campaigns" : " campaigns"}
                   {totalCampaigns > 0 && !approvedOnly && (
-                    <span className="text-gray-400"> · {totalCampaigns.toLocaleString()} total on {network === "tradetracker" ? "TradeTracker" : network === "paidonresults" ? "PaidOnResults" : "Impact"}</span>
+                    <span className="text-gray-400"> · {totalCampaigns.toLocaleString()} total on {network === "tradetracker" ? "TradeTracker" : network === "paidonresults" ? "PaidOnResults" : network === "admitad" ? "Admitad" : network === "linkhexa" ? "Linkhexa" : "Impact"}</span>
                   )}
                 </p>
                 <div className="flex items-center gap-2">

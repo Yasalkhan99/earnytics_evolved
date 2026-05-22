@@ -19,7 +19,7 @@ type AdvertiserRow = {
   advertiserId: string;
   name: string;
   logoUrl: string | null;
-  network: "Impact" | "TradeTracker" | "PaidOnResults" | "Yieldkit";
+  network: "Impact" | "TradeTracker" | "PaidOnResults" | "Yieldkit" | "Admitad" | "Linkhexa";
   clicks: number;
   sales: number;
   leads: number;
@@ -110,6 +110,15 @@ export async function GET(request: Request) {
     .lte("transaction_date", toIso)
     .limit(5000);
 
+  // ── 3d. Admitad transactions ─────────────────────────────────────────────────
+  const { data: admitadTxns } = await supabase
+    .from("admitad_transactions")
+    .select("campaign_id, status, payment, currency, creation_date")
+    .eq("publisher_id", pub.userId)
+    .gte("creation_date", fromIso)
+    .lte("creation_date", toIso)
+    .limit(5000);
+
   const porByCampaign = new Map<string, { sales: number; rev: Record<string, number>; comm: Record<string, number> }>();
   for (const t of porTxns ?? []) {
     const cid = String(t.merchant_id ?? "");
@@ -132,6 +141,35 @@ export async function GET(request: Request) {
     ykByCampaign.set(cid, cur);
   }
 
+  const admitadByCampaign = new Map<string, { sales: number; rev: Record<string, number>; comm: Record<string, number> }>();
+  for (const t of admitadTxns ?? []) {
+    const cid = String(t.campaign_id ?? "");
+    if (!cid) continue;
+    const cur = admitadByCampaign.get(cid) ?? { sales: 0, rev: {}, comm: {} };
+    cur.sales += 1;
+    addMoney(cur.comm, t.currency ?? "USD", Number(t.payment ?? 0));
+    admitadByCampaign.set(cid, cur);
+  }
+
+  const { data: lhTxns } = await supabase
+    .from("linkhexa_transactions")
+    .select("programme_id, status, commission_amount, sale_amount, currency, transaction_date")
+    .eq("publisher_id", pub.userId)
+    .gte("transaction_date", fromIso)
+    .lte("transaction_date", toIso)
+    .limit(5000);
+
+  const lhByCampaign = new Map<string, { sales: number; rev: Record<string, number>; comm: Record<string, number> }>();
+  for (const t of lhTxns ?? []) {
+    const cid = String(t.programme_id ?? "");
+    if (!cid) continue;
+    const cur = lhByCampaign.get(cid) ?? { sales: 0, rev: {}, comm: {} };
+    cur.sales += 1;
+    addMoney(cur.rev,  t.currency ?? "USD", Number(t.sale_amount ?? 0));
+    addMoney(cur.comm, t.currency ?? "USD", Number(t.commission_amount ?? 0));
+    lhByCampaign.set(cid, cur);
+  }
+
   const ttByCampaign = new Map<string, { sales: number; rev: Record<string, number>; comm: Record<string, number> }>();
   for (const t of ttTxns ?? []) {
     const cid = String(t.tt_campaign_id ?? "");
@@ -146,20 +184,26 @@ export async function GET(request: Request) {
   // ── 4. Campaign name + logo lookups ─────────────────────────────────────────
   const impactIds = [...new Set([...impactByCampaign.keys(), ...(goLinks ?? []).filter(l => l.network === "impact").map(l => l.campaign_id)])];
   const ttIds     = [...new Set([...ttByCampaign.keys(),    ...(goLinks ?? []).filter(l => l.network === "tradetracker").map(l => l.campaign_id)])];
-  const porIds    = [...new Set([...porByCampaign.keys(),   ...(goLinks ?? []).filter(l => l.network === "paidonresults").map(l => l.campaign_id)])];
-  const ykIds     = [...new Set([...ykByCampaign.keys(),    ...(goLinks ?? []).filter(l => l.network === "yieldkit").map(l => l.campaign_id)])];
+  const porIds      = [...new Set([...porByCampaign.keys(),     ...(goLinks ?? []).filter(l => l.network === "paidonresults").map(l => l.campaign_id)])];
+  const ykIds       = [...new Set([...ykByCampaign.keys(),      ...(goLinks ?? []).filter(l => l.network === "yieldkit").map(l => l.campaign_id)])];
+  const admitadIds  = [...new Set([...admitadByCampaign.keys(), ...(goLinks ?? []).filter(l => l.network === "admitad").map(l => l.campaign_id)])];
+  const lhIds       = [...new Set([...lhByCampaign.keys(), ...(goLinks ?? []).filter(l => l.network === "linkhexa").map(l => l.campaign_id)])];
 
-  const [{ data: impactCampaigns }, { data: ttCampaigns }, { data: porMerchants }, { data: ykCampaigns }] = await Promise.all([
-    impactIds.length > 0 ? supabase.from("impact_campaigns").select("impact_id, name, logo_url").in("impact_id", impactIds) : { data: [] },
-    ttIds.length  > 0    ? supabase.from("tradetracker_campaigns").select("tt_campaign_id, name, logo_url").in("tt_campaign_id", ttIds) : { data: [] },
-    porIds.length > 0    ? supabase.from("por_merchants").select("merchant_id, name, logo_url").in("merchant_id", porIds) : { data: [] },
-    ykIds.length  > 0    ? supabase.from("yieldkit_campaigns").select("advertiser_id, name, logo_url").in("advertiser_id", ykIds) : { data: [] },
+  const [{ data: impactCampaigns }, { data: ttCampaigns }, { data: porMerchants }, { data: ykCampaigns }, { data: admitadCampaigns }, { data: lhProgrammes }] = await Promise.all([
+    impactIds.length   > 0 ? supabase.from("impact_campaigns").select("impact_id, name, logo_url").in("impact_id", impactIds) : { data: [] },
+    ttIds.length       > 0 ? supabase.from("tradetracker_campaigns").select("tt_campaign_id, name, logo_url").in("tt_campaign_id", ttIds) : { data: [] },
+    porIds.length      > 0 ? supabase.from("por_merchants").select("merchant_id, name, logo_url").in("merchant_id", porIds) : { data: [] },
+    ykIds.length       > 0 ? supabase.from("yieldkit_campaigns").select("advertiser_id, name, logo_url").in("advertiser_id", ykIds) : { data: [] },
+    admitadIds.length  > 0 ? supabase.from("admitad_campaigns").select("campaign_id, name, logo_url").in("campaign_id", admitadIds) : { data: [] },
+    lhIds.length       > 0 ? supabase.from("linkhexa_programmes").select("programme_id, name, logo_url").in("programme_id", lhIds) : { data: [] },
   ]);
 
-  const impactNameMap = new Map((impactCampaigns ?? []).map(c => [String(c.impact_id), { name: c.name, logo: c.logo_url }]));
-  const ttNameMap     = new Map((ttCampaigns     ?? []).map(c => [String(c.tt_campaign_id), { name: c.name, logo: c.logo_url }]));
-  const porNameMap    = new Map((porMerchants    ?? []).map(c => [String(c.merchant_id), { name: c.name, logo: c.logo_url }]));
-  const ykNameMap     = new Map((ykCampaigns     ?? []).map(c => [String(c.advertiser_id), { name: c.name, logo: c.logo_url }]));
+  const impactNameMap   = new Map((impactCampaigns   ?? []).map(c => [String(c.impact_id),       { name: c.name, logo: c.logo_url }]));
+  const ttNameMap       = new Map((ttCampaigns       ?? []).map(c => [String(c.tt_campaign_id),  { name: c.name, logo: c.logo_url }]));
+  const porNameMap      = new Map((porMerchants      ?? []).map(c => [String(c.merchant_id),     { name: c.name, logo: c.logo_url }]));
+  const ykNameMap       = new Map((ykCampaigns       ?? []).map(c => [String(c.advertiser_id),   { name: c.name, logo: c.logo_url }]));
+  const admitadNameMap  = new Map((admitadCampaigns  ?? []).map(c => [String(c.campaign_id),     { name: c.name, logo: c.logo_url }]));
+  const lhNameMap       = new Map((lhProgrammes      ?? []).map(c => [String(c.programme_id),    { name: c.name, logo: c.logo_url }]));
 
   // ── 5. Build advertiser rows ─────────────────────────────────────────────────
   const rows: AdvertiserRow[] = [];
@@ -295,6 +339,66 @@ export async function GET(request: Request) {
       logoUrl: meta?.logo ?? null,
       network: "Yieldkit",
       clicks:  clicksByCampaign.get(`yieldkit:${cid}`) ?? 0,
+      sales:   0, leads: 0,
+      revenueByCurrency: {}, commissionByCurrency: {},
+    });
+  }
+
+  // Admitad rows
+  for (const [cid, agg] of admitadByCampaign) {
+    kpiSales += agg.sales;
+    Object.entries(agg.comm).forEach(([c, v]) => addMoney(kpiComm, c, v));
+    const meta = admitadNameMap.get(cid);
+    rows.push({
+      advertiserId: cid,
+      name:    meta?.name ?? `Admitad Campaign ${cid}`,
+      logoUrl: meta?.logo ?? null,
+      network: "Admitad",
+      clicks:  clicksByCampaign.get(`admitad:${cid}`) ?? 0,
+      sales:   agg.sales, leads: 0,
+      revenueByCurrency: agg.rev, commissionByCurrency: agg.comm,
+    });
+  }
+  for (const l of (goLinks ?? []).filter(l => l.network === "admitad")) {
+    const cid = String(l.campaign_id ?? "");
+    if (!cid || admitadByCampaign.has(cid)) continue;
+    const meta = admitadNameMap.get(cid);
+    rows.push({
+      advertiserId: cid,
+      name:    meta?.name ?? `Admitad Campaign ${cid}`,
+      logoUrl: meta?.logo ?? null,
+      network: "Admitad",
+      clicks:  clicksByCampaign.get(`admitad:${cid}`) ?? 0,
+      sales:   0, leads: 0,
+      revenueByCurrency: {}, commissionByCurrency: {},
+    });
+  }
+
+  for (const [cid, agg] of lhByCampaign) {
+    kpiSales += agg.sales;
+    Object.entries(agg.rev).forEach(([c, v])  => addMoney(kpiRev,  c, v));
+    Object.entries(agg.comm).forEach(([c, v]) => addMoney(kpiComm, c, v));
+    const meta = lhNameMap.get(cid);
+    rows.push({
+      advertiserId: cid,
+      name:    meta?.name ?? `Linkhexa Programme ${cid}`,
+      logoUrl: meta?.logo ?? null,
+      network: "Linkhexa",
+      clicks:  clicksByCampaign.get(`linkhexa:${cid}`) ?? 0,
+      sales:   agg.sales, leads: 0,
+      revenueByCurrency: agg.rev, commissionByCurrency: agg.comm,
+    });
+  }
+  for (const l of (goLinks ?? []).filter(l => l.network === "linkhexa")) {
+    const cid = String(l.campaign_id ?? "");
+    if (!cid || lhByCampaign.has(cid)) continue;
+    const meta = lhNameMap.get(cid);
+    rows.push({
+      advertiserId: cid,
+      name:    meta?.name ?? `Linkhexa Programme ${cid}`,
+      logoUrl: meta?.logo ?? null,
+      network: "Linkhexa",
+      clicks:  clicksByCampaign.get(`linkhexa:${cid}`) ?? 0,
       sales:   0, leads: 0,
       revenueByCurrency: {}, commissionByCurrency: {},
     });
