@@ -15,6 +15,34 @@ function addMoney(bucket: Record<string, number>, currency: string | null | unde
   bucket[c] = (bucket[c] ?? 0) + (Number.isFinite(amount) ? amount : 0);
 }
 
+function mergeMoneyInto(target: Record<string, number>, source: Record<string, number>) {
+  for (const [c, v] of Object.entries(source)) addMoney(target, c, v);
+}
+
+function mergeAdvertiserRows(rows: AdvertiserRow[]): AdvertiserRow[] {
+  const map = new Map<string, AdvertiserRow>();
+  for (const r of rows) {
+    const key = `${r.network}:${r.advertiserId}`;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        ...r,
+        revenueByCurrency: { ...r.revenueByCurrency },
+        commissionByCurrency: { ...r.commissionByCurrency },
+      });
+      continue;
+    }
+    existing.clicks = Math.max(existing.clicks, r.clicks);
+    existing.sales += r.sales;
+    existing.leads += r.leads;
+    mergeMoneyInto(existing.revenueByCurrency, r.revenueByCurrency);
+    mergeMoneyInto(existing.commissionByCurrency, r.commissionByCurrency);
+    if (!existing.logoUrl && r.logoUrl) existing.logoUrl = r.logoUrl;
+    if (existing.name.startsWith("Campaign ") && !r.name.startsWith("Campaign ")) existing.name = r.name;
+  }
+  return [...map.values()];
+}
+
 type AdvertiserRow = {
   advertiserId: string;
   name: string;
@@ -404,8 +432,10 @@ export async function GET(request: Request) {
     });
   }
 
+  const mergedRows = mergeAdvertiserRows(rows);
+
   // Sort by commission desc, then clicks
-  rows.sort((a, b) => {
+  mergedRows.sort((a, b) => {
     const sumComm = (r: AdvertiserRow) => Object.values(r.commissionByCurrency).reduce((s, v) => s + v, 0);
     return sumComm(b) - sumComm(a) || b.clicks - a.clicks;
   });
@@ -421,6 +451,6 @@ export async function GET(request: Request) {
       revenueByCurrency:    kpiRev,
       commissionByCurrency: kpiComm,
     },
-    advertisers: rows,
+    advertisers: mergedRows,
   });
 }

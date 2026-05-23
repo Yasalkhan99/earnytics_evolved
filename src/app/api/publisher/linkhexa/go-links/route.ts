@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireApprovedPublisher } from "@/lib/publisher-session";
 import { createTrackingLink } from "@/lib/linkhexa/client";
+import { getSiteOrigin } from "@/lib/site-origin";
 
 export async function POST(request: Request) {
   const pub = await requireApprovedPublisher();
@@ -54,10 +55,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const origin = getSiteOrigin();
+  const earnyticsShortUrl = `${origin}/go/short/${link.slug}`;
+
   return NextResponse.json({
     ok: true,
     slug:       link.slug,
-    shortUrl:   link.trackingUrl,
+    shortUrl:   earnyticsShortUrl,
+    linkhexaUrl: link.trackingUrl,
     targetUrl:  link.trackingUrl,
     awinTarget: link.targetUrl,
   });

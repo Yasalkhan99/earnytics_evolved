@@ -155,13 +155,13 @@ export default function LinkhexaBrandDetailContent({ campaignId }: { campaignId:
       });
       const data = await res.json();
       if (!res.ok) { setCreateError(data.error ?? "Failed to create link."); return; }
-      const url = (data.shortUrl ?? data.targetUrl) as string | undefined;
-      setLastCreated(url ?? null);
-      if (url) {
+      const shortUrl = (data.shortUrl ?? data.targetUrl) as string | undefined;
+      setLastCreated(shortUrl ?? null);
+      if (shortUrl) {
         const row: GoLink = {
-          id: (data.slug as string) ?? url,
+          id: (data.slug as string) ?? shortUrl,
           slug: (data.slug as string) ?? "",
-          target_url: url,
+          target_url: shortUrl,
           deep_link: false,
           created_at: new Date().toISOString(),
         };
@@ -392,7 +392,7 @@ export default function LinkhexaBrandDetailContent({ campaignId }: { campaignId:
               {applicationStatus === "approved" ? (
                 <>
                   <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
-                    <p className="text-sm text-gray-500">Each click creates a new Linkhexa short link (<code className="text-xs">/go/p/slug</code>) for separate campaigns or placements. Clickref matches the slug for attribution.</p>
+                    <p className="text-sm text-gray-500">Share the <strong>Earnytics</strong> short link below so clicks appear in Reports. It redirects through Linkhexa (<code className="text-xs">/go/p/slug</code>) with your slug as clickref.</p>
                     {createError && <p className="text-sm text-red-600">{createError}</p>}
                     {lastCreated && (
                       <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
@@ -407,14 +407,19 @@ export default function LinkhexaBrandDetailContent({ campaignId }: { campaignId:
                       {creating ? "Creating…" : goLinks.length > 0 ? "Create another link" : "Create tracking link"}
                     </button>
                   </div>
-                  {goLinks.map((l) => (
+                  {goLinks.map((l) => {
+                    const shareUrl = typeof window !== "undefined"
+                      ? `${window.location.origin}/go/short/${l.slug}`
+                      : `/go/short/${l.slug}`;
+                    return (
                     <div key={l.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white px-5 py-3">
-                      <code className="flex-1 truncate text-sm text-teal-700">{l.target_url}</code>
-                      <button onClick={() => void copy(l.target_url, l.id)} className="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-semibold">
+                      <code className="flex-1 truncate text-sm text-teal-700">{shareUrl}</code>
+                      <button onClick={() => void copy(shareUrl, l.id)} className="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-semibold">
                         {copied === l.id ? "✓ Copied" : "Copy"}
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </>
               ) : (
                 <div className="rounded-2xl border border-gray-100 bg-white py-12 text-center text-gray-500">

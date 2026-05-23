@@ -32,10 +32,9 @@ export const metadata: Metadata = {
     "Earnytics connects advertisers with high-quality affiliates to drive performance marketing results. Manage campaigns, track sales, and grow faster.",
   keywords: ["affiliate marketing", "performance marketing", "advertisers", "publishers", "Earnytics"],
   icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-    ],
-    shortcut: "/favicon.svg",
+    icon: [{ url: "/favicon.ico", sizes: "any" }],
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
     title: "Earnytics | Performance Affiliate Marketing Network",

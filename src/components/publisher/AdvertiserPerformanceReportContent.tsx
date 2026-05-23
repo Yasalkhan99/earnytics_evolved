@@ -298,62 +298,65 @@ export default function AdvertiserPerformanceReportContent() {
           )}
         </div>
 
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <div className="relative" ref={presetRef}>
+        <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-auto" ref={presetRef}>
             <button
               type="button"
               onClick={() => setPresetOpen((o) => !o)}
-              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+              className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 sm:w-auto sm:justify-start"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              <span className="text-gray-800">
-                {new Date(appliedFrom + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
-                {" "}&ndash;{" "}
-                {new Date(appliedTo + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+              <span className="flex min-w-0 items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span className="truncate text-gray-800 sm:max-w-none">
+                  {new Date(appliedFrom + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                  {" "}&ndash;{" "}
+                  {new Date(appliedTo + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                </span>
               </span>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 text-gray-400 transition ${presetOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition ${presetOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
 
             {presetOpen && (
-              <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
-                <div className="border-b border-gray-100 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <label className="flex flex-col gap-1 text-[10px] font-medium uppercase tracking-wider text-gray-500">
-                      From
+              <div className="absolute left-0 right-0 z-50 mt-2 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl sm:left-auto sm:right-0 sm:w-80">
+                <div className="border-b border-gray-100 px-4 py-4">
+                  <p className="mb-3 text-xs font-semibold text-gray-700">Custom date range</p>
+                  <div className="flex flex-col gap-3">
+                    <label className="flex min-w-0 flex-col gap-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">From</span>
                       <input
                         type="date"
                         value={from}
                         onChange={(e) => { setFrom(e.target.value); setActivePreset(null); }}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-800 outline-none focus:border-teal-400"
+                        className="box-border w-full min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                       />
                     </label>
-                    <span className="mt-4 text-gray-400">–</span>
-                    <label className="flex flex-col gap-1 text-[10px] font-medium uppercase tracking-wider text-gray-500">
-                      To
+                    <label className="flex min-w-0 flex-col gap-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">To</span>
                       <input
                         type="date"
                         value={to}
                         onChange={(e) => { setTo(e.target.value); setActivePreset(null); }}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-800 outline-none focus:border-teal-400"
+                        className="box-border w-full min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                       />
                     </label>
                   </div>
                   <button
                     type="button"
                     onClick={() => { applyRange(); setActivePreset(null); setPresetOpen(false); }}
-                    className="mt-2.5 w-full rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700"
+                    className="mt-3 w-full rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"
                   >
-                    Apply Custom Range
+                    Apply custom range
                   </button>
                 </div>
                 <div className="py-1">
+                  <p className="px-4 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">Quick presets</p>
                   {DATE_PRESETS.map(({ key, label }) => (
                     <button
                       key={key}
@@ -377,7 +380,7 @@ export default function AdvertiserPerformanceReportContent() {
             type="button"
             disabled={!data || loading}
             onClick={() => exportCsv()}
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -390,7 +393,7 @@ export default function AdvertiserPerformanceReportContent() {
       <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-700" role="note">
         <span className="font-semibold text-sky-800">Notice · </span>
         Figures are from your Earnytics account: short-link <strong className="text-sky-900">clicks</strong> per brand, and{" "}
-        <strong className="text-sky-900">Impact</strong>, <strong className="text-sky-900">TradeTracker</strong>, <strong className="text-sky-900">PaidOnResults</strong> &amp; <strong className="text-sky-900">Yieldkit</strong> transactions attributed to you.
+        <strong className="text-sky-900">Impact</strong>, <strong className="text-sky-900">TradeTracker</strong>, <strong className="text-sky-900">PaidOnResults</strong>, <strong className="text-sky-900">Yieldkit</strong>, <strong className="text-sky-900">Admitad</strong> &amp; <strong className="text-sky-900">Linkhexa</strong> — clicks via your Earnytics <code className="text-xs">/go/short/</code> links; sales after admin transaction sync.
         Payout policy and platform fees are defined in your publisher agreement — not shown as a split here. Native currencies are shown per row.
       </div>
 

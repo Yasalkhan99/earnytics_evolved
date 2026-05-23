@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import brandLogo from "@/assets/earnytics-logo.png";
 
 /* ── tiny SVG icons ── */
 function ChevronDown({ className }: { className?: string }) {
@@ -21,18 +23,19 @@ function NavIcon({ path }: { path: string }) {
   );
 }
 
-/* ── logo ── */
+/* ── logo (bundled from src/assets/earnytics-logo.png) ── */
 function EarnyticsLogo() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
-      {/* icon mark */}
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 shadow-lg shadow-teal-200">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-          <path d="M4 10 L10 4 L16 10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M4 14 L10 8 L16 14" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.55"/>
-        </svg>
-      </div>
-      {/* wordmark */}
+      <Image
+        src={brandLogo}
+        alt="Earnytics"
+        width={40}
+        height={40}
+        unoptimized
+        className="h-10 w-10 shrink-0 rounded-lg object-contain"
+        priority
+      />
       <span
         className="text-[18px] font-extrabold tracking-tight text-gray-900 leading-none"
         style={{ fontFamily: "var(--font-jakarta), var(--font-geist-sans), sans-serif", letterSpacing: "-0.02em" }}
