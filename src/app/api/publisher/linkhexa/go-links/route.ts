@@ -34,7 +34,17 @@ export async function POST(request: Request) {
   try {
     link = await createTrackingLink(programmeId);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const msg = String(e);
+    if (msg.includes("LINKHEXA_API_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Linkhexa is not configured on this server. In Vercel → Settings → Environment Variables, add LINKHEXA_API_KEY and LINKHEXA_API_BASE_URL, then redeploy.",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
   const { error } = await supabase.from("publisher_go_links").insert({
