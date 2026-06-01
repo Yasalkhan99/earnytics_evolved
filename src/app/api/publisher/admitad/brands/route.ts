@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireApprovedPublisher } from "@/lib/publisher-session";
+import { isAdmitadTestCampaign } from "@/lib/admitad/client";
 
 export async function GET(request: Request) {
   const pub = await requireApprovedPublisher();
@@ -36,14 +37,20 @@ export async function GET(request: Request) {
     q = q.eq("status", "active").eq("connected", true);
   }
 
+  // Hide Admitad internal test/onboarding programs (e.g. campaign 105626)
+  q = q
+    .neq("campaign_id", "105626")
+    .or("site_url.is.null,site_url.not.ilike.%onboarding.admitad.com%");
+
   if (search) q = q.ilike("name", `%${search}%`);
   q = q.range(offset, offset + limit - 1);
 
   const { data, count, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const publisherCampaigns = (data ?? []).filter((c) => !isAdmitadTestCampaign(c));
   const total  = count ?? 0;
-  const brands = (data ?? []).map((c) => {
+  const brands = publisherCampaigns.map((c) => {
     // Derive a display name: prefer stored name, else extract from site_url, else campaign_id
     const rawName = (c.name ?? "").trim();
     let cleanName: string;

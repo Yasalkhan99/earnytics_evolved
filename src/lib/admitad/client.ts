@@ -2,6 +2,33 @@ import type { AdmitadCampaign, AdmitadTransaction } from "./types";
 
 const API_BASE = "https://api.admitad.com";
 
+/** Admitad-internal test/onboarding programs — not shown to publishers. */
+const ADMITAD_TEST_CAMPAIGN_IDS = new Set(["105626"]);
+
+export function isAdmitadTestCampaign(row: {
+  campaign_id?: string | null;
+  site_url?: string | null;
+  name?: string | null;
+}): boolean {
+  const id = String(row.campaign_id ?? "").trim();
+  if (ADMITAD_TEST_CAMPAIGN_IDS.has(id)) return true;
+
+  const site = (row.site_url ?? "").trim();
+  if (site) {
+    try {
+      const host = new URL(site.startsWith("http") ? site : `https://${site}`).hostname.toLowerCase();
+      if (host === "onboarding.admitad.com" || host === "admitad.com" || host === "www.admitad.com") {
+        return true;
+      }
+    } catch {
+      /* ignore invalid URLs */
+    }
+  }
+
+  const name = (row.name ?? "").toLowerCase();
+  return /admitad onboarding|onboarding affiliate offer/.test(name);
+}
+
 function getCredentials() {
   return {
     clientId:      process.env.ADMITAD_CLIENT_ID      ?? "",
@@ -168,13 +195,112 @@ export async function fetchTransactions(opts: {
   return txns.filter(t => t.admitadId);
 }
 
-// ─── Tracking URL ─────────────────────────────────────────────────────────────
-// Format: https://ad.admitad.com/g/{campaignId}/{publisherCode}/?ulp={url}&subid={slug}
-export function buildTrackingUrl(campaignId: string, advertiserUrl: string, slug: string): string {
-  const { publisherCode } = getCredentials();
-  const base = `https://ad.admitad.com/g/${encodeURIComponent(campaignId)}/${encodeURIComponent(publisherCode)}/`;
-  const params = new URLSearchParams({ ulp: advertiserUrl, subid: slug });
-  return `${base}?${params}`;
+// ─── Website + tracking links ─────────────────────────────────────────────────
+let cachedWebsiteId: string | null = null;
+
+export async function resolveWebsiteId(): Promise<string> {
+  const fromEnv = process.env.ADMITAD_WEBSITE_ID?.trim();
+  if (fromEnv) return fromEnv;
+  if (cachedWebsiteId) return cachedWebsiteId;
+
+  const token = await getToken("websites");
+  const res = await fetch(`${API_BASE}/websites/v2/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Admitad websites API ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  type WebsiteRow = { id?: number; status?: string };
+  const data = (await res.json()) as WebsiteRow[] | { results?: WebsiteRow[] };
+  const list = Array.isArray(data) ? data : (data.results ?? []);
+  const active = list.find((w) => w.status === "active") ?? list[0];
+  if (active?.id == null) {
+    throw new Error("No Admitad ad space (website) found for this account");
+  }
+  cachedWebsiteId = String(active.id);
+  return cachedWebsiteId;
+}
+
+export type AdmitadCampaignWebsite = {
+  gotolink: string;
+  allowDeeplink: boolean;
+  connected: boolean;
+  siteUrl: string | null;
+};
+
+/** Per-campaign link for our ad space — includes the official `gotolink` base URL. */
+export async function fetchCampaignForWebsite(campaignId: string): Promise<AdmitadCampaignWebsite> {
+  const websiteId = await resolveWebsiteId();
+  const token = await getToken("advcampaigns_for_website");
+  const res = await fetch(
+    `${API_BASE}/advcampaigns/${encodeURIComponent(campaignId)}/website/${encodeURIComponent(websiteId)}/`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Admitad campaign ${campaignId} is not available for ad space ${websiteId}: ${res.status} ${text.slice(0, 200)}`,
+    );
+  }
+
+  const data = (await res.json()) as {
+    gotolink?: string;
+    allow_deeplink?: boolean;
+    connected?: boolean;
+    site_url?: string;
+  };
+  const gotolink = typeof data.gotolink === "string" ? data.gotolink.trim() : "";
+  if (!gotolink) {
+    throw new Error(`Admitad did not return a tracking link for campaign ${campaignId}`);
+  }
+
+  return {
+    gotolink,
+    allowDeeplink: data.allow_deeplink === true,
+    connected: data.connected === true,
+    siteUrl: typeof data.site_url === "string" ? data.site_url : null,
+  };
+}
+
+export function appendGotolinkTrackingParams(
+  gotolink: string,
+  opts: { subid: string; destinationUrl?: string | null },
+): string {
+  const url = new URL(gotolink);
+  url.searchParams.set("subid", opts.subid);
+  if (opts.destinationUrl) {
+    url.searchParams.set("ulp", opts.destinationUrl);
+  }
+  return url.href;
+}
+
+/** Build a publisher tracking URL using Admitad's official gotolink (not the manual /g/ format). */
+export async function buildPublisherTrackingUrl(opts: {
+  campaignId: string;
+  subid: string;
+  destinationUrl?: string | null;
+}): Promise<{ targetUrl: string; allowDeeplink: boolean; connected: boolean }> {
+  const info = await fetchCampaignForWebsite(opts.campaignId);
+  if (!info.connected) {
+    throw new Error(
+      "This campaign is not connected to your Admitad ad space. Join it on publishers.admitad.com first.",
+    );
+  }
+
+  const useCustomLanding = Boolean(opts.destinationUrl) && info.allowDeeplink;
+  if (opts.destinationUrl && !info.allowDeeplink) {
+    throw new Error("This campaign does not support custom landing pages (deeplinks).");
+  }
+
+  const targetUrl = appendGotolinkTrackingParams(info.gotolink, {
+    subid: opts.subid,
+    destinationUrl: useCustomLanding ? opts.destinationUrl : undefined,
+  });
+
+  return { targetUrl, allowDeeplink: info.allowDeeplink, connected: info.connected };
 }
 
 // ─── Test connection ──────────────────────────────────────────────────────────

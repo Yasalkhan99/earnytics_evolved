@@ -98,8 +98,8 @@ export default function BrandsGridContent() {
       params.set("page", String(page));
       params.set("limit", String(limit));
       if (debouncedSearch) params.set("q", debouncedSearch);
-      // TradeTracker always scoped to approved — publisher sees only their approved campaigns
-      params.set("scope", (approvedOnly || network === "tradetracker") ? "approved" : "all");
+      // Match other networks: "All brands" shows full catalog; "My brands" shows approved only.
+      params.set("scope", approvedOnly ? "approved" : "all");
 
       try {
         const apiBase = network === "tradetracker" ? "/api/publisher/tradetracker/brands"
@@ -253,7 +253,14 @@ export default function BrandsGridContent() {
   }
 
   const emptyNoCache = !loading && totalCampaigns === 0;
-  const emptyApprovedTab = approvedOnly && pg && pg.total === 0 && totalCampaigns > 0 && !debouncedSearch;
+  const emptyFiltered =
+    !loading &&
+    !error &&
+    brands.length === 0 &&
+    totalCampaigns > 0 &&
+    !debouncedSearch &&
+    (pg == null || pg.total === 0);
+  const emptyApprovedTab = emptyFiltered && approvedOnly;
   const emptySearch = pg && pg.total === 0 && debouncedSearch.length > 0;
 
   return (
@@ -270,9 +277,9 @@ export default function BrandsGridContent() {
             {approvedOnly ? "My brands" : "Available brands"}
           </h1>
           <p className="mt-2 max-w-xl text-sm text-teal-100/80">
-            {(approvedOnly || network === "tradetracker")
+            {approvedOnly
               ? `Campaigns your admin has approved for you${network === "tradetracker" ? " on TradeTracker" : ""}. Open a card for details.`
-              : `All available ${network === "paidonresults" ? "PaidOnResults" : network === "yieldkit" ? "Yieldkit" : network === "admitad" ? "Admitad" : network === "linkhexa" ? "Linkhexa" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
+              : `All available ${network === "tradetracker" ? "TradeTracker" : network === "paidonresults" ? "PaidOnResults" : network === "yieldkit" ? "Yieldkit" : network === "admitad" ? "Admitad" : network === "linkhexa" ? "Linkhexa" : "Impact"} campaigns. Apply here for Earnytics approval to promote them.`}
           </p>
 
           {/* Network selector */}
@@ -396,6 +403,19 @@ export default function BrandsGridContent() {
             </div>
             <p className="font-semibold text-gray-700">No approved brands yet</p>
             <p className="mt-1 text-sm text-gray-400">Apply from Available brands or wait for admin approval.</p>
+            <Link href="/dashboard/brands" className="mt-4 text-sm font-semibold text-teal-600 hover:text-teal-700">
+              Browse all brands →
+            </Link>
+          </div>
+        ) : !error && emptyFiltered ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50">
+              <svg className="h-8 w-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+              </svg>
+            </div>
+            <p className="font-semibold text-gray-700">{totalCampaigns} campaigns available</p>
+            <p className="mt-1 text-sm text-gray-400">None match this view yet. Hard-refresh the page (Ctrl+Shift+R) if you expected to see them here.</p>
           </div>
         ) : !error && emptySearch ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">

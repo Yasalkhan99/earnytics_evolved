@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { requireApprovedPublisher } from "@/lib/publisher-session";
+import { isAdmitadTestCampaign } from "@/lib/admitad/client";
 
 export async function GET(
   _request: Request,
@@ -18,7 +19,9 @@ export async function GET(
     .eq("campaign_id", campaignId)
     .single();
 
-  if (error || !campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  if (error || !campaign || isAdmitadTestCampaign(campaign)) {
+    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  }
 
   const [appRes, linksRes] = await Promise.all([
     supabase.from("publisher_admitad_applications")

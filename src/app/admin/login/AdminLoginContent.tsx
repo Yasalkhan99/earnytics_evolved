@@ -24,7 +24,11 @@ export default function AdminLoginContent() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setStatus("error");
-        setErrorMessage(data?.error || "Invalid password.");
+        if (res.status === 404) {
+          setErrorMessage("Login API not found. Restart dev server with: npm run dev");
+        } else {
+          setErrorMessage(data?.error || "Invalid password.");
+        }
         return;
       }
       router.replace("/admin");

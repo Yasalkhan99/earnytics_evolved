@@ -6,6 +6,50 @@ const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 48;
 const MIN_LIMIT = 6;
 
+type CampRow = {
+  impact_id: string;
+  name: string;
+  advertiser_name: string | null;
+  logo_url: string | null;
+  click_through_url: string | null;
+  status: string | null;
+  currency: string | null;
+  raw: Record<string, unknown> | null;
+};
+
+function toBrand(c: CampRow, appStatus?: string) {
+  let uiStatus: "not_applied" | "pending" | "approved" | "rejected";
+  if (!appStatus) uiStatus = "not_applied";
+  else if (appStatus === "pending") uiStatus = "pending";
+  else if (appStatus === "approved") uiStatus = "approved";
+  else uiStatus = "rejected";
+
+  const raw = c.raw ?? {};
+  const description = typeof raw.CampaignDescription === "string" ? raw.CampaignDescription : null;
+  const advertiserUrl =
+    typeof raw.AdvertiserUrl === "string"
+      ? raw.AdvertiserUrl
+      : typeof raw.CampaignUrl === "string"
+        ? raw.CampaignUrl
+        : null;
+  const allowsDeeplinking = raw.AllowsDeeplinking === "true";
+  const contractStatus = typeof raw.ContractStatus === "string" ? raw.ContractStatus : c.status;
+
+  return {
+    campaignId: c.impact_id,
+    name: c.name,
+    advertiserName: c.advertiser_name,
+    logoUrl: c.logo_url ? `/api/impact-logo?c=${encodeURIComponent(c.impact_id)}` : null,
+    clickThroughUrl: c.click_through_url,
+    advertiserUrl,
+    description: description ? description.slice(0, 160) : null,
+    contractStatus,
+    allowsDeeplinking,
+    currency: c.currency,
+    applicationStatus: uiStatus,
+  };
+}
+
 export async function GET(request: Request) {
   const pub = await requireApprovedPublisher();
   if (!pub.ok) {
@@ -17,113 +61,82 @@ export async function GET(request: Request) {
   let limit = parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT;
   limit = Math.min(MAX_LIMIT, Math.max(MIN_LIMIT, limit));
   const qRaw = (searchParams.get("q") || "").trim();
-  const q = qRaw.toLowerCase();
   const scope = searchParams.get("scope") === "approved" ? "approved" : "all";
+  const offset = (page - 1) * limit;
 
   const supabase = createServerSupabaseClient();
 
-  // Load all impact_campaigns from cache
-  type CampRow = {
-    impact_id: string;
-    name: string;
-    advertiser_name: string | null;
-    logo_url: string | null;
-    click_through_url: string | null;
-    status: string | null;
-    currency: string | null;
-    raw: Record<string, unknown> | null;
-  };
+  const [{ count: totalCampaigns, error: totalErr }, { data: apps, error: aErr }] = await Promise.all([
+    supabase.from("impact_campaigns").select("*", { count: "exact", head: true }),
+    supabase
+      .from("publisher_impact_applications")
+      .select("campaign_id, status")
+      .eq("publisher_id", pub.userId),
+  ]);
 
-  const { data: campaigns, error: cErr } = await supabase
-    .from("impact_campaigns")
-    .select("impact_id, name, advertiser_name, logo_url, click_through_url, status, currency, raw")
-    .order("name", { ascending: true });
-
-  if (cErr) {
-    return NextResponse.json({ error: cErr.message }, { status: 500 });
-  }
-
-  if (!campaigns || campaigns.length === 0) {
-    return NextResponse.json({
-      brands: [],
-      pagination: { page: 1, limit, total: 0, totalPages: 1 },
-      totalCampaigns: 0,
-    });
-  }
-
-  // Load this publisher's applications
-  const { data: apps, error: aErr } = await supabase
-    .from("publisher_impact_applications")
-    .select("campaign_id, status")
-    .eq("publisher_id", pub.userId);
-
-  if (aErr) {
-    return NextResponse.json({ error: aErr.message }, { status: 500 });
-  }
+  if (totalErr) return NextResponse.json({ error: totalErr.message }, { status: 500 });
+  if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
 
   const appByCampaign = new Map<string, string>();
   for (const a of apps ?? []) {
     appByCampaign.set(String(a.campaign_id), String(a.status));
   }
 
-  let brands = (campaigns as CampRow[]).map((c) => {
-    const appStatus = appByCampaign.get(c.impact_id);
-    let uiStatus: "not_applied" | "pending" | "approved" | "rejected";
-    if (!appStatus) uiStatus = "not_applied";
-    else if (appStatus === "pending") uiStatus = "pending";
-    else if (appStatus === "approved") uiStatus = "approved";
-    else uiStatus = "rejected";
+  const approvedIds = [...appByCampaign.entries()]
+    .filter(([, status]) => status === "approved")
+    .map(([id]) => id);
 
-    const raw = c.raw ?? {};
-    const description = typeof raw.CampaignDescription === "string" ? raw.CampaignDescription : null;
-    const advertiserUrl = typeof raw.AdvertiserUrl === "string" ? raw.AdvertiserUrl
-      : typeof raw.CampaignUrl === "string" ? raw.CampaignUrl : null;
-    const allowsDeeplinking = raw.AllowsDeeplinking === "true";
-    const contractStatus = typeof raw.ContractStatus === "string" ? raw.ContractStatus : c.status;
+  const catalogTotal = totalCampaigns ?? 0;
 
-    return {
-      campaignId: c.impact_id,
-      name: c.name,
-      advertiserName: c.advertiser_name,
-      logoUrl: c.logo_url ? `/api/impact-logo?c=${encodeURIComponent(c.impact_id)}` : null,
-      clickThroughUrl: c.click_through_url,
-      advertiserUrl,
-      description: description ? description.slice(0, 160) : null,
-      contractStatus,
-      allowsDeeplinking,
-      currency: c.currency,
-      applicationStatus: uiStatus,
-    };
-  });
+  if (scope === "approved" && approvedIds.length === 0) {
+    return NextResponse.json({
+      brands: [],
+      pagination: { page: 1, limit, total: 0, totalPages: 1, rangeFrom: 0, rangeTo: 0 },
+      totalCampaigns: catalogTotal,
+    });
+  }
+
+  let query = supabase
+    .from("impact_campaigns")
+    .select(
+      "impact_id, name, advertiser_name, logo_url, click_through_url, status, currency, raw",
+      { count: "exact" },
+    )
+    .order("name", { ascending: true });
 
   if (scope === "approved") {
-    brands = brands.filter((b) => b.applicationStatus === "approved");
+    query = query.in("impact_id", approvedIds);
   }
-  if (q) {
-    brands = brands.filter(
-      (b) =>
-        b.name.toLowerCase().includes(q) ||
-        (b.advertiserName ?? "").toLowerCase().includes(q) ||
-        b.campaignId.includes(qRaw)
+
+  if (qRaw) {
+    query = query.or(
+      `name.ilike.%${qRaw}%,advertiser_name.ilike.%${qRaw}%,impact_id.ilike.%${qRaw}%`,
     );
   }
 
-  const total = brands.length;
+  const { data: campaigns, count, error: cErr } = await query.range(offset, offset + limit - 1);
+
+  if (cErr) {
+    return NextResponse.json({ error: cErr.message }, { status: 500 });
+  }
+
+  const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(page, totalPages);
-  const from = (safePage - 1) * limit;
-  const pageItems = brands.slice(from, from + limit);
+  const rangeFrom = total === 0 ? 0 : (safePage - 1) * limit + 1;
+  const pageItems = (campaigns ?? []) as CampRow[];
+  const rangeTo = total === 0 ? 0 : rangeFrom + pageItems.length - 1;
 
   return NextResponse.json({
-    brands: pageItems,
+    brands: pageItems.map((c) => toBrand(c, appByCampaign.get(c.impact_id))),
     pagination: {
       page: safePage,
       limit,
       total,
       totalPages,
-      rangeFrom: total === 0 ? 0 : from + 1,
-      rangeTo: total === 0 ? 0 : Math.min(from + pageItems.length, total),
+      rangeFrom,
+      rangeTo,
     },
-    totalCampaigns: campaigns.length,
+    totalCampaigns: catalogTotal,
   });
 }
